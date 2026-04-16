@@ -2,9 +2,11 @@
 .env
 node_modules/
 .venv/
+.venv.py39.bak/
 __pycache__/
 venv/
 .aidssist/object_store/
+.aidssist/source_snapshots/
 .pytest_cache/
 dist/
 build/
