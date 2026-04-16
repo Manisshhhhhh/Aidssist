@@ -27,6 +27,13 @@ DEFAULT_CORS_ORIGINS = ",".join(
 )
 
 
+def _default_cors_origins(environment: str) -> str:
+    normalized = environment.strip().lower()
+    if normalized in {"production", "staging"}:
+        return "*"
+    return DEFAULT_CORS_ORIGINS
+
+
 def _env_int(name: str, default: int) -> int:
     try:
         return int(str(os.getenv(name, default)).strip())
@@ -98,9 +105,10 @@ class RuntimeSettings:
 def get_settings() -> RuntimeSettings:
     app_state_dir = APP_STATE_DIR
     app_state_dir.mkdir(parents=True, exist_ok=True)
+    environment = _env_str("AIDSSIST_ENV", "RAILWAY_ENVIRONMENT_NAME", default="development") or "development"
 
     return RuntimeSettings(
-        environment=_env_str("AIDSSIST_ENV", "RAILWAY_ENVIRONMENT_NAME", default="development") or "development",
+        environment=environment,
         api_host=_env_str("AIDSSIST_API_HOST", default="0.0.0.0") or "0.0.0.0",
         api_port=_env_int("AIDSSIST_API_PORT", _env_int("PORT", 8000)),
         api_base_url=_env_str(
@@ -109,7 +117,7 @@ def get_settings() -> RuntimeSettings:
             "RAILWAY_PUBLIC_DOMAIN",
             default="",
         ).rstrip("/"),
-        cors_origins=_env_csv("AIDSSIST_CORS_ORIGINS", DEFAULT_CORS_ORIGINS),
+        cors_origins=_env_csv("AIDSSIST_CORS_ORIGINS", _default_cors_origins(environment)),
         database_url=str(os.getenv("AIDSSIST_DATABASE_URL", "")).strip(),
         redis_url=str(os.getenv("AIDSSIST_REDIS_URL", "redis://redis:6379/0")).strip(),
         metrics_path=str(os.getenv("AIDSSIST_METRICS_PATH", "/metrics")).strip() or "/metrics",
