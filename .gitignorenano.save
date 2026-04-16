@@ -1,4 +1,0 @@
-git add .
-git commit -m "Clean repo for production"
-git push
-
