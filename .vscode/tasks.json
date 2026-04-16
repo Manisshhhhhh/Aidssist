@@ -1,0 +1,57 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Aidssist: FastAPI API",
+      "type": "shell",
+      "command": "set -a; source .env; set +a; export AIDSSIST_REDIS_URL=''; export AIDSSIST_OBJECT_STORE_BACKEND=local; export AIDSSIST_S3_ENDPOINT_URL=''; export AIDSSIST_S3_ACCESS_KEY_ID=''; export AIDSSIST_S3_SECRET_ACCESS_KEY=''; ${workspaceFolder}/.venv/bin/uvicorn backend.aidssist_runtime.api:app --host 127.0.0.1 --port 8000",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "aidssist"
+      }
+    },
+    {
+      "label": "Aidssist: Streamlit UI",
+      "type": "shell",
+      "command": "set -a; source .env; set +a; export AIDSSIST_API_URL='http://127.0.0.1:8000'; export AIDSSIST_REDIS_URL=''; export AIDSSIST_OBJECT_STORE_BACKEND=local; export AIDSSIST_S3_ENDPOINT_URL=''; export AIDSSIST_S3_ACCESS_KEY_ID=''; export AIDSSIST_S3_SECRET_ACCESS_KEY=''; ${workspaceFolder}/.venv/bin/streamlit run frontend/app.py --server.address 127.0.0.1 --server.port 8501",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "aidssist"
+      }
+    },
+    {
+      "label": "Aidssist: React Frontend",
+      "type": "shell",
+      "command": "export NVM_DIR=\"$HOME/.nvm\"; [ -s \"$NVM_DIR/nvm.sh\" ] && . \"$NVM_DIR/nvm.sh\"; npm run dev -- --host 127.0.0.1 --port 5173",
+      "options": {
+        "cwd": "${workspaceFolder}/web"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "aidssist"
+      }
+    },
+    {
+      "label": "Aidssist: Run Tests",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/python -m unittest discover -s backend/tests -t .",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    }
+  ]
+}

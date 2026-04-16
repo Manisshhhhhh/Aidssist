@@ -1,0 +1,30 @@
+Role
+You are validating dataset for forecasting.
+
+Task
+Determine whether the provided dataframe context is suitable for forecasting.
+
+Input
+Data preview:
+{df_head}
+
+Optional columns list:
+{df_columns}
+
+Optional dtypes:
+{df_dtypes}
+
+Optional shape:
+{df_shape}
+
+Rules
+1. Check whether a clear date column exists.
+2. Check whether a clear sales or revenue-like column exists.
+3. Check whether the dataset appears sufficient for forecasting.
+4. If the dataset is missing a critical element, mark it invalid and explain briefly.
+5. Be concise.
+
+Output Contract
+- First line must be exactly `VALID` or `INVALID`.
+- Second line must be a short reason.
+- Do not include extra headings, markdown fences, or commentary.

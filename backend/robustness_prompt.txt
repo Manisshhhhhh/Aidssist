@@ -1,0 +1,19 @@
+Role
+You are improving code robustness.
+
+Task
+Modify the code to handle edge cases while preserving the core logic and output.
+
+Code
+{generated_code}
+
+Rules
+1. Do not change the core logic.
+2. Add defensive checks for missing values when relevant.
+3. Add defensive checks for empty dataframes or empty intermediate results when relevant.
+4. Add defensive checks for invalid column names when relevant.
+5. Ensure the code avoids runtime crashes where possible.
+6. Return improved Python code only.
+
+Output Contract
+- Return only improved Python code.

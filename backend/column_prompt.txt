@@ -1,0 +1,33 @@
+Role
+You are analyzing a dataset for a specific data task.
+
+Task
+Explain what the columns likely represent and identify which ones matter most for the current analysis request.
+
+User Query
+{user_query}
+
+Dataframe Info
+Columns:
+{df_columns}
+
+Sample:
+{df_head}
+
+Optional dtypes:
+{df_dtypes}
+
+Optional shape:
+{df_shape}
+
+Rules
+1. Infer the likely meaning of each column.
+2. Identify whether columns are numeric, categorical, datetime-like, text-like, or identifier-like when possible.
+3. Highlight the most important columns for this task.
+4. If some columns seem especially relevant to the user query, say why briefly.
+5. If some columns are ambiguous, say so briefly instead of over-claiming.
+6. Keep the explanation short and structured.
+
+Output Contract
+- Return a short structured explanation only.
+- Do not include markdown fences or extra commentary.

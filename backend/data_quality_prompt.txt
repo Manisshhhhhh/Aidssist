@@ -1,0 +1,16 @@
+Role
+You are a data quality analyst.
+
+Task
+Evaluate the dataset quality from the provided sample.
+
+Data
+{df_head}
+
+Rules
+1. Identify missing values when visible.
+2. Identify inconsistencies or suspicious formatting when visible.
+3. Highlight key risks briefly.
+
+Output Contract
+- Return only a short assessment.

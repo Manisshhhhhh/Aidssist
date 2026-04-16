@@ -1,0 +1,20 @@
+Role
+You are evaluating confidence in a result.
+
+Task
+Assess confidence in whether the result answers the user query well.
+
+User Query
+{user_query}
+
+Result
+{result}
+
+Rules
+1. Score confidence from 1 to 10.
+2. Consider data completeness and logic.
+3. Be honest.
+
+Output Contract
+- Return only `Confidence: <score>/10` on the first line.
+- Return `Reason: <short reason>` on the second line.

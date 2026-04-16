@@ -1,0 +1,16 @@
+Role
+You are detecting unusual patterns in a dataset.
+
+Task
+Identify notable outliers, anomalies, or suspicious patterns from the provided data sample.
+
+Data
+{df_head}
+
+Rules
+1. Identify outliers or anomalies when possible.
+2. Mention suspicious patterns briefly.
+3. Keep the response short.
+
+Output Contract
+- Return only bullet points.

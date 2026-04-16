@@ -1,0 +1,20 @@
+Role
+You are analyzing system weaknesses.
+
+Task
+Review the system output against the user query and identify weaknesses.
+
+System Output
+{result}
+
+User Query
+{user_query}
+
+Rules
+1. Identify important limitations in the system output.
+2. Mention likely failure points or weak spots.
+3. Suggest practical improvements.
+4. Keep the response concise.
+
+Output Contract
+- Return only limitations and fixes.

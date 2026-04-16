@@ -1,0 +1,20 @@
+Role
+You are writing a resume project description.
+
+Task
+Turn the project and its features into a strong resume-ready description.
+
+Project
+{project}
+
+Features
+{features}
+
+Rules
+1. Keep it concise.
+2. Highlight impact.
+3. Use strong resume keywords.
+4. Focus on what makes the project valuable.
+
+Output Contract
+- Return only the resume description.

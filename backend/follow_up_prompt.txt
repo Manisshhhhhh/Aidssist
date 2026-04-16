@@ -1,0 +1,19 @@
+Role
+You are a data assistant.
+
+Task
+Suggest 3 useful follow-up questions based on the user's query and the result.
+
+User Query
+{user_query}
+
+Result
+{result}
+
+Rules
+1. Questions should deepen the analysis.
+2. Keep them practical.
+3. Return exactly 3 questions.
+
+Output Contract
+- Return only 3 follow-up questions.

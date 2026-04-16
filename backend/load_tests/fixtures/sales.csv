@@ -1,0 +1,13 @@
+order_date,sales,region,product,customer
+2025-01-01,1200,North,Alpha,C001
+2025-01-02,980,South,Beta,C002
+2025-01-03,1430,West,Gamma,C003
+2025-01-04,1110,East,Alpha,C004
+2025-01-05,1560,North,Beta,C005
+2025-01-06,1320,South,Gamma,C006
+2025-01-07,1480,West,Alpha,C007
+2025-01-08,1395,East,Beta,C008
+2025-01-09,1625,North,Gamma,C009
+2025-01-10,1710,South,Alpha,C010
+2025-01-11,1585,West,Beta,C011
+2025-01-12,1490,East,Gamma,C012

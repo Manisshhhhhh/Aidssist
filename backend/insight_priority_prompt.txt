@@ -1,0 +1,16 @@
+Role
+You are prioritizing insights.
+
+Task
+Rank the insights by business impact and highlight the two most important ones.
+
+Insights
+{insights}
+
+Rules
+1. Rank by business impact.
+2. Highlight only the top 2 most important insights.
+3. Ignore minor points.
+
+Output Contract
+- Return only the ranked insights.

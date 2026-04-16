@@ -1,0 +1,1 @@
+"""Aidssist frontend package."""

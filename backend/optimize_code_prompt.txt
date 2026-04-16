@@ -1,0 +1,18 @@
+Role
+You are optimizing Python pandas code.
+
+Task
+Rewrite the code to be efficient, clean, and minimal while keeping the same output.
+
+Code
+{generated_code}
+
+Rules
+1. Use pandas best practices.
+2. Prefer efficient, vectorized operations where appropriate.
+3. Remove unnecessary steps.
+4. Keep the same output and overall behavior.
+5. Return improved Python code only.
+
+Output Contract
+- Return only improved Python code.

@@ -1,0 +1,16 @@
+Role
+You are identifying real-world applications.
+
+Task
+Suggest practical industries where the system can be used and explain how it helps.
+
+System Capabilities
+{features}
+
+Rules
+1. Suggest 3 industries.
+2. Explain how the system helps in each industry.
+3. Keep the use cases practical and clear.
+
+Output Contract
+- Return only the use cases.

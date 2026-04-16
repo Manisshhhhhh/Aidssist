@@ -1,0 +1,22 @@
+Role
+You are suggesting useful features for modeling.
+
+Task
+Suggest practical feature engineering and preprocessing ideas based on the dataframe sample.
+
+Dataframe
+{df_head}
+
+Optional columns:
+{df_columns}
+
+Optional dtypes:
+{df_dtypes}
+
+Rules
+1. Suggest practical transformations such as encoding, scaling, date extraction, binning, or missing-value handling when relevant.
+2. Mention important columns when they are identifiable from the sample.
+3. Keep the suggestions practical and concise.
+
+Output Contract
+- Return only feature suggestions.

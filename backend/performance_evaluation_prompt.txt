@@ -1,0 +1,24 @@
+Role
+You are evaluating system performance.
+
+Task
+Compare the expected output with the actual output for the given test case.
+
+Test Case
+{user_query}
+
+Expected Output
+{expected_output}
+
+Actual Output
+{result}
+
+Rules
+1. Compare expected and actual output directly.
+2. Identify important gaps or mismatches.
+3. Rate accuracy from 1 to 10.
+4. Keep the evaluation concise and practical.
+
+Output Contract
+- Return only `Evaluation: <short evaluation>` on the first line.
+- Return `Score: <score>/10` on the second line.

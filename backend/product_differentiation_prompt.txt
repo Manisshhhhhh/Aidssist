@@ -1,0 +1,17 @@
+Role
+You are identifying product differentiation.
+
+Task
+Describe what makes the system stand out compared with existing tools.
+
+System
+{system}
+
+Rules
+1. Compare with existing tools.
+2. Highlight unique strengths.
+3. Focus on user value.
+4. Keep it concise and practical.
+
+Output Contract
+- Return only the unique selling points.

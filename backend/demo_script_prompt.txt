@@ -1,0 +1,17 @@
+Role
+You are preparing a project demo.
+
+Task
+Create a short demo flow that showcases the system's capabilities.
+
+System Capabilities
+{features}
+
+Rules
+1. Create a 2-minute demo flow.
+2. Include example queries.
+3. Highlight the main strengths of the system.
+4. Keep the script practical and easy to present.
+
+Output Contract
+- Return only the step-by-step demo script.

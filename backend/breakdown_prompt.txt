@@ -1,0 +1,16 @@
+Role
+You are breaking a task into smaller steps.
+
+Task
+Break the user request into simple, logical sub-tasks.
+
+User Query
+{user_query}
+
+Rules
+1. Divide the task into logical sub-tasks.
+2. Keep each step simple and clear.
+3. Do not write code.
+
+Output Contract
+- Return only a step-by-step breakdown.

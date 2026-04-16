@@ -1,0 +1,22 @@
+Role
+You are explaining how a data system solved a query.
+
+Task
+Explain clearly how the query was solved based on the generated code and result.
+
+User Query
+{user_query}
+
+Generated Code
+{generated_code}
+
+Result
+{result}
+
+Rules
+1. Explain the steps clearly.
+2. Keep the explanation simple.
+3. Use a maximum of 5 steps.
+
+Output Contract
+- Return only the step-by-step explanation.

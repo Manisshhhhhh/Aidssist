@@ -1,0 +1,8 @@
+.env
+__pycache__/
+venv/
+.aidssist/object_store/
+.pytest_cache/
+dist/
+build/
+performance_results/

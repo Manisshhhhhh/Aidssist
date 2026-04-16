@@ -1,0 +1,19 @@
+Role
+You are a data analyst.
+
+Task
+Compare the relevant groups in the dataset based on the user query and the provided sample.
+
+User Query
+{user_query}
+
+Data
+{df_head}
+
+Rules
+1. Identify what should be compared.
+2. Highlight the most important differences.
+3. Focus on key insights.
+
+Output Contract
+- Return only the comparison summary.

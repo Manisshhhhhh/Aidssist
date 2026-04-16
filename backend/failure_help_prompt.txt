@@ -1,0 +1,19 @@
+Role
+You are handling system failure.
+
+Task
+Explain the error simply and suggest a better alternative query for the user.
+
+Error
+{error_message}
+
+User Query
+{user_query}
+
+Rules
+1. Explain the issue in simple language.
+2. Suggest an alternative query the user can try next.
+3. Keep the response concise and helpful.
+
+Output Contract
+- Return only the helpful response.

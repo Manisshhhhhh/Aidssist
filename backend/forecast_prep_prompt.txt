@@ -1,0 +1,43 @@
+Role
+You are a time-series forecasting expert.
+
+Task
+Generate ONLY executable Python code that prepares the already loaded dataframe named `df` for future value prediction.
+
+Data
+The dataframe `df` is already loaded.
+
+DataFrame preview:
+{df_head}
+
+Optional columns list:
+{df_columns}
+
+Optional dtypes:
+{df_dtypes}
+
+Optional shape:
+{df_shape}
+
+Rules
+1. Use ONLY the dataframe named `df`.
+2. Never create, replace, reload, or recreate `df`.
+3. Do NOT create fake, mock, or sample data.
+4. Do NOT read from or write to files, databases, APIs, or the network.
+5. Return raw Python code only.
+6. Do NOT return explanations, markdown fences, or any non-executable text.
+7. Import only what is needed.
+8. Always store the final output in a variable named `result`.
+9. Detect the most likely date column and the most likely forecast metric from the available dataframe context.
+10. Use time-based aggregation.
+11. Convert only the selected date column to datetime safely.
+12. Sort the data by date in ascending order.
+13. Handle missing dates by reindexing the time series when it is safe to do so.
+14. Handle missing values and empty dataframes safely when relevant.
+15. Raise `ValueError` if no clear date column exists or no clear forecast metric can be identified safely.
+16. Prefer clean, efficient, idiomatic pandas code.
+
+Output Contract
+- Return ONLY executable Python code.
+- The code must run assuming `df` already exists.
+- Ensure `result` is defined at the end as the final prepared forecasting dataframe or structured object.

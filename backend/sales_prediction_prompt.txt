@@ -1,0 +1,52 @@
+Role
+You are a machine learning engineer.
+
+TASK:
+Build a predictive model.
+
+Data
+The dataframe `df` is already loaded.
+
+DataFrame preview:
+{df_head}
+
+Optional columns list:
+{df_columns}
+
+Optional dtypes:
+{df_dtypes}
+
+Optional shape:
+{df_shape}
+
+RULES:
+- Detect target column
+- Split data
+- Train model
+- Evaluate accuracy
+- Store result
+- Use ONLY the dataframe named `df`
+- Never create, replace, reload, or recreate `df`
+- Do NOT create fake, mock, or sample data
+- Do NOT read from or write to files, databases, APIs, or the network
+- Return raw Python code only
+- Do NOT return explanations, markdown fences, or any non-executable text
+- Import only what is needed
+- Detect the date column safely from the available dataframe context when the data is time-based
+- Use time-based aggregation before modeling when multiple rows exist per date
+- Handle missing dates and missing values safely on the relevant modeling columns
+- Use only simple forecasting or predictive approaches such as linear regression or moving average
+- Do NOT use deep learning
+- Split the data into train and test portions when enough rows exist for evaluation
+- Train the model, evaluate accuracy, and store the evaluation metrics
+- Output a structured forecast or prediction result and always store it in a variable named `result`
+- Raise `ValueError` if no clear target column or no clear date column can be identified safely for the requested task
+- Prefer clean, efficient, idiomatic pandas and scikit-learn code
+
+OUTPUT:
+Python code only
+
+Output Contract
+- Return ONLY executable Python code.
+- The code must run assuming `df` already exists.
+- Ensure `result` is defined at the end as the final answer object.

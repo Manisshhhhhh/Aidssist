@@ -1,0 +1,238 @@
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      streamlit-ui:
+        condition: service_healthy
+      fastapi-api:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    volumes:
+      - ./backend/deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/nginx_status || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  streamlit-ui:
+    build: .
+    command: streamlit run frontend/app.py --server.port 8501 --server.address 0.0.0.0
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3-flash-preview}
+      AIDSSIST_EMBEDDING_MODEL: ${AIDSSIST_EMBEDDING_MODEL:-text-embedding-004}
+      AIDSSIST_EMBEDDING_DIMENSIONS: ${AIDSSIST_EMBEDDING_DIMENSIONS:-128}
+      AIDSSIST_CHUNK_SIZE_CHARS: ${AIDSSIST_CHUNK_SIZE_CHARS:-1400}
+      AIDSSIST_CHUNK_OVERLAP_CHARS: ${AIDSSIST_CHUNK_OVERLAP_CHARS:-160}
+      AIDSSIST_RETRIEVAL_TOP_K: ${AIDSSIST_RETRIEVAL_TOP_K:-8}
+      AIDSSIST_MAX_SOLVER_RETRIES: ${AIDSSIST_MAX_SOLVER_RETRIES:-2}
+      AIDSSIST_DATABASE_URL: ${AIDSSIST_DATABASE_URL:-postgresql+psycopg://aidssist:aidssist@postgres:5432/aidssist}
+      AIDSSIST_API_URL: http://fastapi-api:8000
+      AIDSSIST_REQUEST_TIMEOUT_SECONDS: 60
+      AIDSSIST_MAX_UPLOAD_MB: ${AIDSSIST_MAX_UPLOAD_MB:-500}
+      AIDSSIST_DB_POOL_SIZE: ${AIDSSIST_DB_POOL_SIZE:-20}
+      AIDSSIST_DB_MAX_OVERFLOW: ${AIDSSIST_DB_MAX_OVERFLOW:-40}
+      AIDSSIST_LOG_LEVEL: ${AIDSSIST_LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      fastapi-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8501/_stcore/health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  fastapi-api:
+    build: .
+    command: uvicorn backend.aidssist_runtime.api:app --host 0.0.0.0 --port 8000
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3-flash-preview}
+      AIDSSIST_EMBEDDING_MODEL: ${AIDSSIST_EMBEDDING_MODEL:-text-embedding-004}
+      AIDSSIST_EMBEDDING_DIMENSIONS: ${AIDSSIST_EMBEDDING_DIMENSIONS:-128}
+      AIDSSIST_CHUNK_SIZE_CHARS: ${AIDSSIST_CHUNK_SIZE_CHARS:-1400}
+      AIDSSIST_CHUNK_OVERLAP_CHARS: ${AIDSSIST_CHUNK_OVERLAP_CHARS:-160}
+      AIDSSIST_RETRIEVAL_TOP_K: ${AIDSSIST_RETRIEVAL_TOP_K:-8}
+      AIDSSIST_MAX_SOLVER_RETRIES: ${AIDSSIST_MAX_SOLVER_RETRIES:-2}
+      AIDSSIST_DATABASE_URL: ${AIDSSIST_DATABASE_URL:-postgresql+psycopg://aidssist:aidssist@postgres:5432/aidssist}
+      AIDSSIST_REDIS_URL: ${AIDSSIST_REDIS_URL:-redis://redis:6379/0}
+      AIDSSIST_S3_ENDPOINT_URL: ${AIDSSIST_S3_ENDPOINT_URL:-http://minio:9000}
+      AIDSSIST_S3_ACCESS_KEY_ID: ${AIDSSIST_S3_ACCESS_KEY_ID:-minioadmin}
+      AIDSSIST_S3_SECRET_ACCESS_KEY: ${AIDSSIST_S3_SECRET_ACCESS_KEY:-minioadmin}
+      AIDSSIST_S3_BUCKET_NAME: ${AIDSSIST_S3_BUCKET_NAME:-aidssist-artifacts}
+      AIDSSIST_OBJECT_STORE_BACKEND: ${AIDSSIST_OBJECT_STORE_BACKEND:-minio}
+      AIDSSIST_PROVIDER_MAX_CONCURRENCY: ${AIDSSIST_PROVIDER_MAX_CONCURRENCY:-4}
+      AIDSSIST_MAX_UPLOAD_MB: ${AIDSSIST_MAX_UPLOAD_MB:-500}
+      AIDSSIST_SLOW_QUERY_MS: ${AIDSSIST_SLOW_QUERY_MS:-250}
+      AIDSSIST_DB_POOL_SIZE: ${AIDSSIST_DB_POOL_SIZE:-20}
+      AIDSSIST_DB_MAX_OVERFLOW: ${AIDSSIST_DB_MAX_OVERFLOW:-40}
+      AIDSSIST_LOG_LEVEL: ${AIDSSIST_LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/readyz >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  worker:
+    build: .
+    command: python -m backend.aidssist_runtime.worker
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3-flash-preview}
+      AIDSSIST_EMBEDDING_MODEL: ${AIDSSIST_EMBEDDING_MODEL:-text-embedding-004}
+      AIDSSIST_EMBEDDING_DIMENSIONS: ${AIDSSIST_EMBEDDING_DIMENSIONS:-128}
+      AIDSSIST_CHUNK_SIZE_CHARS: ${AIDSSIST_CHUNK_SIZE_CHARS:-1400}
+      AIDSSIST_CHUNK_OVERLAP_CHARS: ${AIDSSIST_CHUNK_OVERLAP_CHARS:-160}
+      AIDSSIST_RETRIEVAL_TOP_K: ${AIDSSIST_RETRIEVAL_TOP_K:-8}
+      AIDSSIST_MAX_SOLVER_RETRIES: ${AIDSSIST_MAX_SOLVER_RETRIES:-2}
+      AIDSSIST_DATABASE_URL: ${AIDSSIST_DATABASE_URL:-postgresql+psycopg://aidssist:aidssist@postgres:5432/aidssist}
+      AIDSSIST_REDIS_URL: ${AIDSSIST_REDIS_URL:-redis://redis:6379/0}
+      AIDSSIST_S3_ENDPOINT_URL: ${AIDSSIST_S3_ENDPOINT_URL:-http://minio:9000}
+      AIDSSIST_S3_ACCESS_KEY_ID: ${AIDSSIST_S3_ACCESS_KEY_ID:-minioadmin}
+      AIDSSIST_S3_SECRET_ACCESS_KEY: ${AIDSSIST_S3_SECRET_ACCESS_KEY:-minioadmin}
+      AIDSSIST_S3_BUCKET_NAME: ${AIDSSIST_S3_BUCKET_NAME:-aidssist-artifacts}
+      AIDSSIST_OBJECT_STORE_BACKEND: ${AIDSSIST_OBJECT_STORE_BACKEND:-minio}
+      AIDSSIST_PROVIDER_MAX_CONCURRENCY: ${AIDSSIST_PROVIDER_MAX_CONCURRENCY:-4}
+      AIDSSIST_MAX_UPLOAD_MB: ${AIDSSIST_MAX_UPLOAD_MB:-500}
+      AIDSSIST_DB_POOL_SIZE: ${AIDSSIST_DB_POOL_SIZE:-20}
+      AIDSSIST_DB_MAX_OVERFLOW: ${AIDSSIST_DB_MAX_OVERFLOW:-40}
+      AIDSSIST_LOG_LEVEL: ${AIDSSIST_LOG_LEVEL:-INFO}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save "" --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: aidssist
+      POSTGRES_USER: aidssist
+      POSTGRES_PASSWORD: aidssist
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.max=10000
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - log_min_duration_statement=250
+      - -c
+      - max_connections=300
+      - -c
+      - shared_buffers=256MB
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aidssist -d aidssist"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${AIDSSIST_S3_ACCESS_KEY_ID:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${AIDSSIST_S3_SECRET_ACCESS_KEY:-minioadmin}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:9000/minio/health/live || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  prometheus:
+    image: prom/prometheus:latest
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    volumes:
+      - ./backend/deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./backend/deploy/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./backend/deploy/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./backend/deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    command:
+      - --path.rootfs=/host
+    volumes:
+      - /:/host:ro,rslave
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:latest
+    environment:
+      DATA_SOURCE_NAME: postgresql://aidssist:aidssist@postgres:5432/aidssist?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    command:
+      - --nginx.scrape-uri=http://nginx/nginx_status
+    depends_on:
+      nginx:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  minio-data:
+  prometheus-data:
+  grafana-data:

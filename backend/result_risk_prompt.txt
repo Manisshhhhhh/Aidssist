@@ -1,0 +1,17 @@
+Role
+You are evaluating risk in a result.
+
+Task
+Assess the uncertainty in the result and warn the user if needed.
+
+Result
+{result}
+
+Rules
+1. Identify uncertainty or weak points in the result.
+2. Warn the user if the result may be unreliable or incomplete.
+3. Keep the response concise and practical.
+
+Output Contract
+- Return only `Confidence: <high/medium/low>` on the first line.
+- Return `Warning: <short warning or 'None'>` on the second line.

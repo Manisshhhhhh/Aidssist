@@ -1,0 +1,21 @@
+Role
+You are evaluating test performance.
+
+Task
+Assess whether the system output answered the query well and whether the output was useful.
+
+Query
+{user_query}
+
+Output
+{result}
+
+Rules
+1. Decide whether the query was answered correctly.
+2. Judge whether the output was useful.
+3. Rate the overall quality from 1 to 10.
+4. Keep the feedback concise and practical.
+
+Output Contract
+- Return only `Score: <score>/10` on the first line.
+- Return `Feedback: <short feedback>` on the second line.

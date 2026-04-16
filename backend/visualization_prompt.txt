@@ -1,0 +1,30 @@
+Role
+You are choosing the best visualization for a data analysis task.
+
+Task
+Decide the single best chart type for the user's task using the sample data and query context.
+
+Input
+User query:
+{user_query}
+
+Data:
+{df_head}
+
+Optional columns:
+{df_columns}
+
+Optional dtypes:
+{df_dtypes}
+
+Rules
+1. Choose only ONE best chart.
+2. Justify the choice briefly.
+3. Avoid unnecessary plots.
+4. Prefer the chart that most directly answers the task.
+5. If no chart is needed, say `No chart` and explain briefly.
+
+Output Contract
+- Return only `Chart type: <type>` on the first line.
+- Return `Reason: <brief reason>` on the second line.
+- Do not include markdown fences or extra commentary.
