@@ -1,10 +1,14 @@
 import type {
+  AssetIntelligence,
   AnalyzeJobResponse,
+  AskDataResponse,
   AssetDetail,
   AuthResponse,
   DatasetTransformResponse,
   DemoResponse,
   ForecastJobResponse,
+  FolderUploadResponse,
+  ImportJob,
   JobStatusResponse,
   SolveRunStatus,
   TimelineItem,
@@ -165,8 +169,287 @@ export async function uploadAsset(
   return request<AssetDetail>("/v1/assets", { method: "POST", body: formData }, token);
 }
 
+export type FolderUploadItemInput = {
+  id: string;
+  file: File;
+  relativePath: string;
+};
+
+export type FolderUploadProgressSnapshot = {
+  overallProgress: number;
+  fileProgress: Record<string, number>;
+};
+
+const FOLDER_UPLOAD_BATCH_LIMIT = 8;
+const FOLDER_UPLOAD_BATCH_BYTES = 24 * 1024 * 1024;
+const FOLDER_UPLOAD_CONCURRENCY = 3;
+
+function parseXhrError(xhr: XMLHttpRequest): string {
+  if (!xhr.responseText?.trim()) {
+    return xhr.status >= 500
+      ? "Aidssist is temporarily unavailable. Please try again in a moment."
+      : `Request failed with status ${xhr.status || 0}.`;
+  }
+  try {
+    const payload = JSON.parse(xhr.responseText) as { detail?: string };
+    if (payload.detail?.trim()) {
+      return payload.detail.trim();
+    }
+  } catch {
+    // fall back to raw text
+  }
+  return xhr.responseText.trim();
+}
+
+function createFolderUploadBatches(items: FolderUploadItemInput[]): FolderUploadItemInput[][] {
+  const batches: FolderUploadItemInput[][] = [];
+  let currentBatch: FolderUploadItemInput[] = [];
+  let currentBytes = 0;
+
+  for (const item of items) {
+    const nextBytes = currentBytes + item.file.size;
+    if (
+      currentBatch.length > 0 &&
+      (currentBatch.length >= FOLDER_UPLOAD_BATCH_LIMIT || nextBytes > FOLDER_UPLOAD_BATCH_BYTES)
+    ) {
+      batches.push(currentBatch);
+      currentBatch = [];
+      currentBytes = 0;
+    }
+    currentBatch.push(item);
+    currentBytes += item.file.size;
+  }
+
+  if (currentBatch.length > 0) {
+    batches.push(currentBatch);
+  }
+
+  return batches;
+}
+
+function sendFolderUploadRequest(
+  payload: {
+    workspaceId: string;
+    sessionId: string;
+    folderName: string;
+    title?: string;
+    finalize: boolean;
+    items?: FolderUploadItemInput[];
+  },
+  token: string,
+  onProgress?: (loaded: number, total: number) => void
+): Promise<FolderUploadResponse> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_BASE_URL}/v1/upload-folder`);
+    xhr.setRequestHeader("Accept", "application/json");
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve((JSON.parse(xhr.responseText || "{}") || {}) as FolderUploadResponse);
+        } catch (error) {
+          reject(error instanceof Error ? error : new Error("Folder upload response could not be parsed."));
+        }
+        return;
+      }
+      reject(new Error(parseXhrError(xhr)));
+    };
+    xhr.onerror = () => reject(new Error("Folder upload failed before the server returned a response."));
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        onProgress?.(event.loaded, event.total);
+      }
+    };
+
+    const formData = new FormData();
+    formData.append("workspace_id", payload.workspaceId);
+    formData.append("session_id", payload.sessionId);
+    formData.append("folder_name", payload.folderName);
+    formData.append("finalize", payload.finalize ? "true" : "false");
+    if (payload.title?.trim()) {
+      formData.append("title", payload.title.trim());
+    }
+    for (const item of payload.items || []) {
+      formData.append("files", item.file, item.file.name);
+      formData.append("relative_paths", item.relativePath);
+    }
+    xhr.send(formData);
+  });
+}
+
+async function runBatchedFolderUpload(
+  batches: FolderUploadItemInput[][],
+  worker: (batch: FolderUploadItemInput[], batchIndex: number) => Promise<void>
+): Promise<void> {
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(FOLDER_UPLOAD_CONCURRENCY, batches.length) }, async () => {
+    while (cursor < batches.length) {
+      const batchIndex = cursor;
+      cursor += 1;
+      await worker(batches[batchIndex], batchIndex);
+    }
+  });
+  await Promise.all(workers);
+}
+
+export async function uploadFolderAsset(
+  workspaceId: string,
+  title: string,
+  folderName: string,
+  items: FolderUploadItemInput[],
+  token: string,
+  onProgress?: (snapshot: FolderUploadProgressSnapshot) => void
+): Promise<FolderUploadResponse> {
+  const sessionId =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `folder-${Date.now()}`;
+  const batches = createFolderUploadBatches(items);
+  const totalBytes = items.reduce((sum, item) => sum + item.file.size, 0);
+  const batchLoaded = new Map<number, number>();
+  const fileProgress: Record<string, number> = Object.fromEntries(items.map((item) => [item.id, 0]));
+
+  const emitProgress = () => {
+    const loadedBytes = Array.from(batchLoaded.values()).reduce((sum, value) => sum + value, 0);
+    onProgress?.({
+      overallProgress: totalBytes > 0 ? Math.min(1, loadedBytes / totalBytes) : 1,
+      fileProgress: { ...fileProgress }
+    });
+  };
+
+  await runBatchedFolderUpload(batches, async (batch, batchIndex) => {
+    const batchBytes = batch.reduce((sum, item) => sum + item.file.size, 0);
+    await sendFolderUploadRequest(
+      {
+        workspaceId,
+        sessionId,
+        folderName,
+        title,
+        finalize: false,
+        items: batch
+      },
+      token,
+      (loaded) => {
+        batchLoaded.set(batchIndex, Math.min(loaded, batchBytes));
+        let consumed = 0;
+        const normalizedLoaded = Math.min(loaded, batchBytes);
+        for (const item of batch) {
+          const start = consumed;
+          const end = consumed + item.file.size;
+          const progress =
+            end <= start
+              ? 1
+              : Math.min(1, Math.max(0, (normalizedLoaded - start) / Math.max(item.file.size, 1)));
+          fileProgress[item.id] = progress;
+          consumed = end;
+        }
+        emitProgress();
+      }
+    );
+    batchLoaded.set(batchIndex, batchBytes);
+    for (const item of batch) {
+      fileProgress[item.id] = 1;
+    }
+    emitProgress();
+  });
+
+  const response = await sendFolderUploadRequest(
+    {
+      workspaceId,
+      sessionId,
+      folderName,
+      title,
+      finalize: true
+    },
+    token
+  );
+  onProgress?.({
+    overallProgress: 1,
+    fileProgress: { ...Object.fromEntries(items.map((item) => [item.id, 1])) }
+  });
+  return response;
+}
+
 export async function getAsset(assetId: string, token: string): Promise<AssetDetail> {
   return request<AssetDetail>(`/v1/assets/${assetId}`, { method: "GET" }, token);
+}
+
+export async function getAssetIntelligence(
+  assetId: string,
+  token: string,
+  forceRefresh = false
+): Promise<AssetIntelligence> {
+  const query = forceRefresh ? "?force_refresh=true" : "";
+  return request<AssetIntelligence>(`/v1/assets/${assetId}/intelligence${query}`, { method: "GET" }, token);
+}
+
+export async function importFromGoogleDrive(
+  payload: {
+    workspace_id: string;
+    file_id: string;
+    access_token: string;
+  },
+  token: string
+): Promise<ImportJob> {
+  return request<ImportJob>(
+    "/v1/import/google-drive",
+    {
+      method: "POST",
+      body: JSON.stringify(payload)
+    },
+    token
+  );
+}
+
+export async function importFromKaggle(
+  payload: {
+    workspace_id: string;
+    dataset_url: string;
+  },
+  token: string
+): Promise<ImportJob> {
+  return request<ImportJob>(
+    "/v1/import/kaggle",
+    {
+      method: "POST",
+      body: JSON.stringify(payload)
+    },
+    token
+  );
+}
+
+export async function getImportJob(jobId: string, token: string): Promise<ImportJob> {
+  return request<ImportJob>(`/v1/import/jobs/${jobId}`, { method: "GET" }, token);
+}
+
+export async function generateAIInsights(
+  payload: { asset_id: string; force_refresh?: boolean },
+  token: string
+): Promise<AssetIntelligence> {
+  return request<AssetIntelligence>(
+    "/v1/ai/insights",
+    {
+      method: "POST",
+      body: JSON.stringify(payload)
+    },
+    token
+  );
+}
+
+export async function askYourData(
+  payload: { asset_id: string; question: string },
+  token: string
+): Promise<AskDataResponse> {
+  return request<AskDataResponse>(
+    "/v1/ai/chat",
+    {
+      method: "POST",
+      body: JSON.stringify(payload)
+    },
+    token
+  );
 }
 
 export async function transformDataset(

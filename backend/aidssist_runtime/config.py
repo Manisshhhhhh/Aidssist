@@ -79,10 +79,13 @@ class RuntimeSettings:
     job_timeout_seconds: int
     job_poll_interval_seconds: float
     worker_burst: bool
+    celery_broker_url: str
+    celery_result_backend: str
     provider_max_concurrency_per_process: int
     pipeline_cache_version: str
     object_store_backend: str
     object_store_dir: Path
+    dataset_session_dir: Path
     s3_endpoint_url: str
     s3_access_key_id: str
     s3_secret_access_key: str
@@ -99,6 +102,14 @@ class RuntimeSettings:
     db_pool_size: int
     db_max_overflow: int
     session_ttl_hours: int
+    llm_base_url: str
+    llm_api_key: str
+    llm_model: str
+    kaggle_config_dir: str
+    google_drive_api_base_url: str
+    google_drive_download_url: str
+    import_sync_threshold_mb: int
+    intelligence_sample_rows: int
 
 
 @lru_cache(maxsize=1)
@@ -127,11 +138,19 @@ def get_settings() -> RuntimeSettings:
         job_timeout_seconds=_env_int("AIDSSIST_JOB_TIMEOUT_SECONDS", 900),
         job_poll_interval_seconds=_env_float("AIDSSIST_JOB_POLL_INTERVAL_SECONDS", 1.5),
         worker_burst=str(os.getenv("AIDSSIST_WORKER_BURST", "false")).strip().lower() == "true",
+        celery_broker_url=_env_str("AIDSSIST_CELERY_BROKER_URL", default=str(os.getenv("AIDSSIST_REDIS_URL", "")).strip()),
+        celery_result_backend=_env_str(
+            "AIDSSIST_CELERY_RESULT_BACKEND",
+            default=str(os.getenv("AIDSSIST_REDIS_URL", "")).strip(),
+        ),
         provider_max_concurrency_per_process=_env_int("AIDSSIST_PROVIDER_MAX_CONCURRENCY", 4),
         pipeline_cache_version=str(os.getenv("AIDSSIST_PIPELINE_CACHE_VERSION", "2026-04-01-v1")).strip()
         or "2026-04-01-v1",
         object_store_backend=str(os.getenv("AIDSSIST_OBJECT_STORE_BACKEND", "auto")).strip().lower() or "auto",
         object_store_dir=app_state_dir / "object_store",
+        dataset_session_dir=Path(
+            _env_str("AIDSSIST_DATASET_SESSION_DIR", default=str(app_state_dir / "datasets"))
+        ).expanduser(),
         s3_endpoint_url=str(os.getenv("AIDSSIST_S3_ENDPOINT_URL", "")).strip(),
         s3_access_key_id=str(os.getenv("AIDSSIST_S3_ACCESS_KEY_ID", "")).strip(),
         s3_secret_access_key=str(os.getenv("AIDSSIST_S3_SECRET_ACCESS_KEY", "")).strip(),
@@ -150,4 +169,18 @@ def get_settings() -> RuntimeSettings:
         db_pool_size=_env_int("AIDSSIST_DB_POOL_SIZE", 20),
         db_max_overflow=_env_int("AIDSSIST_DB_MAX_OVERFLOW", 40),
         session_ttl_hours=_env_int("AIDSSIST_SESSION_TTL_HOURS", 720),
+        llm_base_url=_env_str("AIDSSIST_LLM_BASE_URL", default="").rstrip("/"),
+        llm_api_key=_env_str("AIDSSIST_LLM_API_KEY", default=""),
+        llm_model=_env_str("AIDSSIST_LLM_MODEL", default=""),
+        kaggle_config_dir=_env_str("AIDSSIST_KAGGLE_CONFIG_DIR", default=""),
+        google_drive_api_base_url=_env_str(
+            "AIDSSIST_GOOGLE_DRIVE_API_BASE_URL",
+            default="https://www.googleapis.com/drive/v3",
+        ).rstrip("/"),
+        google_drive_download_url=_env_str(
+            "AIDSSIST_GOOGLE_DRIVE_DOWNLOAD_URL",
+            default="https://www.googleapis.com/drive/v3/files",
+        ).rstrip("/"),
+        import_sync_threshold_mb=_env_int("AIDSSIST_IMPORT_SYNC_THRESHOLD_MB", 25),
+        intelligence_sample_rows=_env_int("AIDSSIST_INTELLIGENCE_SAMPLE_ROWS", 5000),
     )

@@ -7,7 +7,7 @@ ensure_runtime_or_raise("api")
 import time
 import uuid
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile, status
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -20,10 +20,24 @@ from .analysis_service import (
     submit_analysis_job,
     submit_forecast_job,
 )
+from .data_intelligence import ask_asset_question, get_asset_intelligence, prepare_asset_intelligence
+from .celery_app import celery_app
+from .import_orchestrator import (
+    enqueue_kaggle_import,
+    get_import_job_payload,
+    import_google_drive_into_workspace,
+)
 from .auth_service import authenticate_user, get_user_from_token, register_user, revoke_token
 from .cache import get_cache_store
 from .config import get_settings
 from .dataset_transform import transform_dataset
+from .folder_upload import (
+    build_folder_dataset_summary,
+    cleanup_staged_folder_upload,
+    infer_folder_name,
+    list_staged_folder_files,
+    stage_folder_upload_files,
+)
 from .ingestion import build_asset_detail, ingest_workspace_files
 from .logging_utils import configure_logging, get_logger
 from .metrics import render_metrics_payload
@@ -32,6 +46,10 @@ from .schemas import (
     AnalysisHistoryItemResponse,
     AnalyzeJobRequest,
     AnalyzeJobResponse,
+    AIChatRequest,
+    AIChatResponse,
+    AIInsightsRequest,
+    AssetIntelligenceResponse,
     AutoAnalysisEnvelopeResponse,
     AssetDetail,
     AssetFileSummary,
@@ -50,7 +68,15 @@ from .schemas import (
     DerivedDatasetSummary,
     ForecastJobRequest,
     ForecastJobResponse,
+    FolderUploadDatasetSummaryResponse,
+    FolderUploadFileResultResponse,
+    FolderUploadPreviewResponse,
+    FolderUploadRelationshipResponse,
+    FolderUploadResponse,
+    GoogleDriveImportRequest,
+    ImportJobResponse,
     JobStatusResponse,
+    KaggleImportRequest,
     RetrievalTrace,
     RetrievalTraceItem,
     SolveRequest,
@@ -87,6 +113,22 @@ if settings.cors_origins:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+
+def _schedule_asset_intelligence_refresh(asset_id: str, background_tasks: BackgroundTasks) -> None:
+    if celery_app is not None:
+        try:
+            from .celery_tasks import refresh_asset_intelligence_job
+
+            refresh_asset_intelligence_job.delay(asset_id)
+            return
+        except Exception:
+            LOGGER.warning(
+                "Celery asset intelligence refresh could not be queued",
+                extra={"asset_id": asset_id},
+                exc_info=True,
+            )
+    background_tasks.add_task(prepare_asset_intelligence, asset_id, force_refresh=True)
 
 
 def _user_response(user) -> UserResponse:
@@ -197,6 +239,24 @@ def _validator_report_response(record) -> ValidationReport:
         checks=list(record.checks),
         error_message=record.error_message,
         created_at=record.created_at,
+    )
+
+
+def _import_job_response(payload: dict) -> ImportJobResponse:
+    return ImportJobResponse(
+        job_id=str(payload.get("job_id") or ""),
+        workspace_id=str(payload.get("workspace_id") or ""),
+        session_id=str(payload.get("session_id") or ""),
+        source_type=str(payload.get("source_type") or ""),
+        source_ref=str(payload.get("source_ref") or ""),
+        source_label=str(payload.get("source_label") or ""),
+        status=str(payload.get("status") or ""),
+        asset_id=str(payload.get("asset_id")) if payload.get("asset_id") is not None else None,
+        error_message=str(payload.get("error_message")) if payload.get("error_message") is not None else None,
+        result=dict(payload.get("result") or {}),
+        created_at=str(payload.get("created_at") or ""),
+        updated_at=str(payload.get("updated_at") or ""),
+        completed_at=str(payload.get("completed_at")) if payload.get("completed_at") is not None else None,
     )
 
 
@@ -599,6 +659,7 @@ def get_workspace_timeline(workspace_id: str, current_user=Depends(get_current_u
 
 @app.post("/v1/assets", response_model=AssetDetail)
 async def upload_workspace_assets(
+    background_tasks: BackgroundTasks,
     workspace_id: str = Form(...),
     title: str | None = Form(None),
     files: list[UploadFile] = File(...),
@@ -626,7 +687,130 @@ async def upload_workspace_assets(
             )
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
+        _schedule_asset_intelligence_refresh(result["asset"].asset_id, background_tasks)
         return _asset_detail_response(store, result["asset"].asset_id)
+
+
+@app.post("/upload-folder", response_model=FolderUploadResponse)
+@app.post("/v1/upload-folder", response_model=FolderUploadResponse)
+async def upload_folder(
+    background_tasks: BackgroundTasks,
+    workspace_id: str = Form(...),
+    session_id: str = Form(...),
+    folder_name: str | None = Form(None),
+    title: str | None = Form(None),
+    finalize: bool = Form(False),
+    files: list[UploadFile] | None = File(None),
+    relative_paths: list[str] | None = Form(None),
+    current_user=Depends(get_current_user),
+):
+    with WorkflowStore() as store:
+        if not store.user_has_workspace_access(current_user.user_id, workspace_id):
+            raise HTTPException(status_code=404, detail=f"Workspace '{workspace_id}' was not found.")
+
+        uploaded_files = files or []
+        resolved_relative_paths = list(relative_paths or [])
+        if resolved_relative_paths and len(resolved_relative_paths) != len(uploaded_files):
+            raise HTTPException(status_code=400, detail="Each uploaded file must include a matching relative path.")
+
+        staged_payloads: list[dict[str, object]] = []
+        for index, item in enumerate(uploaded_files):
+            staged_payloads.append(
+                {
+                    "file_name": item.filename or "dataset.csv",
+                    "relative_path": resolved_relative_paths[index]
+                    if index < len(resolved_relative_paths)
+                    else (item.filename or "dataset.csv"),
+                    "content_type": item.content_type or "application/octet-stream",
+                    "content": await item.read(),
+                }
+            )
+
+        staged_files, failed_files = stage_folder_upload_files(
+            session_id=session_id,
+            uploaded_files=staged_payloads,
+        )
+        staged_paths = [str(item["relative_path"]) for item in staged_files]
+        failed_payload = [FolderUploadFileResultResponse(**item) for item in failed_files]
+        resolved_folder_name = infer_folder_name(
+            folder_name,
+            staged_paths or list(resolved_relative_paths) or [str(item.filename or "") for item in uploaded_files],
+        )
+
+        if not finalize:
+            total_size_bytes = sum(int(item.get("size_bytes") or 0) for item in staged_files)
+            return FolderUploadResponse(
+                status="staged",
+                session_id=session_id,
+                folder_name=resolved_folder_name,
+                files_processed=len(staged_files),
+                file_count=len(staged_files),
+                total_size_bytes=total_size_bytes,
+                processed_files=[FolderUploadFileResultResponse(**item) for item in staged_files],
+                failed_files=failed_payload,
+            )
+
+        staged_session_files = list_staged_folder_files(session_id)
+        if not staged_session_files:
+            detail = failed_payload[0].error if failed_payload else "No valid CSV or XLSX files were staged for upload."
+            raise HTTPException(status_code=400, detail=detail)
+
+        try:
+            result = ingest_workspace_files(
+                store=store,
+                workspace_id=workspace_id,
+                uploaded_files=staged_session_files,
+                user_id=current_user.user_id,
+                title=title or resolved_folder_name,
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+
+        _schedule_asset_intelligence_refresh(result["asset"].asset_id, background_tasks)
+
+        asset = _asset_detail_response(store, result["asset"].asset_id)
+        intelligence_payload = build_folder_dataset_summary(
+            store=store,
+            asset_id=result["asset"].asset_id,
+            folder_name=resolved_folder_name,
+            session_id=session_id,
+        )
+        processed_files = [
+            FolderUploadFileResultResponse(**item)
+            for item in intelligence_payload.get("processed_files") or []
+        ]
+        dataset_summary_payload = intelligence_payload.get("dataset_summary") or {}
+        dataset_summary = FolderUploadDatasetSummaryResponse(
+            tables=list(dataset_summary_payload.get("tables") or []),
+            tags=list(dataset_summary_payload.get("tags") or []),
+            relationships=[
+                FolderUploadRelationshipResponse(**item)
+                for item in dataset_summary_payload.get("relationships") or []
+            ],
+            previews=[
+                FolderUploadPreviewResponse(**item)
+                for item in dataset_summary_payload.get("previews") or []
+            ],
+            suggested_analysis_prompt=str(dataset_summary_payload.get("suggested_analysis_prompt") or "") or None,
+            ready_message=str(dataset_summary_payload.get("ready_message") or "Dataset Ready -> Generate Insights"),
+        )
+        total_size_bytes = sum(int(item.size_bytes or 0) for item in processed_files) + sum(
+            int(item.size_bytes or 0) for item in failed_payload
+        )
+        response_status = "partial_success" if failed_payload else "success"
+        background_tasks.add_task(cleanup_staged_folder_upload, session_id)
+        return FolderUploadResponse(
+            status=response_status,
+            session_id=session_id,
+            folder_name=resolved_folder_name,
+            files_processed=len(processed_files),
+            file_count=len(processed_files) + len(failed_payload),
+            total_size_bytes=total_size_bytes,
+            asset=asset,
+            processed_files=processed_files,
+            failed_files=failed_payload,
+            dataset_summary=dataset_summary,
+        )
 
 
 @app.get("/v1/assets/{asset_id}", response_model=AssetDetail)
@@ -638,6 +822,110 @@ def get_asset(asset_id: str, current_user=Depends(get_current_user)):
         if not store.user_has_workspace_access(current_user.user_id, asset.workspace_id):
             raise HTTPException(status_code=404, detail=f"Asset '{asset_id}' was not found.")
         return _asset_detail_response(store, asset_id)
+
+
+@app.get("/v1/assets/{asset_id}/intelligence", response_model=AssetIntelligenceResponse)
+def get_asset_intelligence_snapshot(
+    asset_id: str,
+    force_refresh: bool = False,
+    current_user=Depends(get_current_user),
+):
+    with WorkflowStore() as store:
+        asset = store.get_asset(asset_id)
+        if asset is None or not store.user_has_workspace_access(current_user.user_id, asset.workspace_id):
+            raise HTTPException(status_code=404, detail=f"Asset '{asset_id}' was not found.")
+    try:
+        payload = get_asset_intelligence(asset_id, force_refresh=force_refresh)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return AssetIntelligenceResponse(**payload)
+
+
+@app.post("/import/google-drive", response_model=ImportJobResponse)
+@app.post("/v1/import/google-drive", response_model=ImportJobResponse)
+def import_google_drive(
+    payload: GoogleDriveImportRequest,
+    current_user=Depends(get_current_user),
+):
+    with WorkflowStore() as store:
+        if not store.user_has_workspace_access(current_user.user_id, payload.workspace_id):
+            raise HTTPException(status_code=404, detail=f"Workspace '{payload.workspace_id}' was not found.")
+    try:
+        job = import_google_drive_into_workspace(
+            workspace_id=payload.workspace_id,
+            user_id=current_user.user_id,
+            file_id=payload.file_id,
+            access_token=payload.access_token,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    return _import_job_response(get_import_job_payload(job.job_id))
+
+
+@app.post("/import/kaggle", response_model=ImportJobResponse)
+@app.post("/v1/import/kaggle", response_model=ImportJobResponse)
+def import_kaggle_dataset(
+    payload: KaggleImportRequest,
+    current_user=Depends(get_current_user),
+):
+    with WorkflowStore() as store:
+        if not store.user_has_workspace_access(current_user.user_id, payload.workspace_id):
+            raise HTTPException(status_code=404, detail=f"Workspace '{payload.workspace_id}' was not found.")
+    try:
+        job = enqueue_kaggle_import(
+            workspace_id=payload.workspace_id,
+            user_id=current_user.user_id,
+            dataset_url=payload.dataset_url,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return _import_job_response(get_import_job_payload(job.job_id))
+
+
+@app.get("/import/jobs/{job_id}", response_model=ImportJobResponse)
+@app.get("/v1/import/jobs/{job_id}", response_model=ImportJobResponse)
+def get_import_job_status(job_id: str, current_user=Depends(get_current_user)):
+    try:
+        payload = get_import_job_payload(job_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+    with WorkflowStore() as store:
+        if not store.user_has_workspace_access(current_user.user_id, str(payload.get("workspace_id") or "")):
+            raise HTTPException(status_code=404, detail=f"Import job '{job_id}' was not found.")
+    return _import_job_response(payload)
+
+
+@app.post("/ai/insights", response_model=AssetIntelligenceResponse)
+@app.post("/v1/ai/insights", response_model=AssetIntelligenceResponse)
+def generate_ai_insights(payload: AIInsightsRequest, current_user=Depends(get_current_user)):
+    with WorkflowStore() as store:
+        asset = store.get_asset(payload.asset_id)
+        if asset is None or not store.user_has_workspace_access(current_user.user_id, asset.workspace_id):
+            raise HTTPException(status_code=404, detail=f"Asset '{payload.asset_id}' was not found.")
+    try:
+        intelligence = get_asset_intelligence(payload.asset_id, force_refresh=payload.force_refresh)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return AssetIntelligenceResponse(**intelligence)
+
+
+@app.post("/ai/chat", response_model=AIChatResponse)
+@app.post("/v1/ai/chat", response_model=AIChatResponse)
+def ask_your_data(payload: AIChatRequest, current_user=Depends(get_current_user)):
+    with WorkflowStore() as store:
+        asset = store.get_asset(payload.asset_id)
+        if asset is None or not store.user_has_workspace_access(current_user.user_id, asset.workspace_id):
+            raise HTTPException(status_code=404, detail=f"Asset '{payload.asset_id}' was not found.")
+    try:
+        response_payload = ask_asset_question(payload.asset_id, payload.question)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
+    return AIChatResponse(**response_payload)
 
 
 @app.post("/v1/solve", response_model=SolveRunStatus)

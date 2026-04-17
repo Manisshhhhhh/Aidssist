@@ -72,10 +72,16 @@ class ObjectStore:
 
 
 def build_object_key(prefix: str, identifier: str, file_name: str) -> str:
-    safe_name = Path(file_name or "artifact.bin").name
-    extension = Path(safe_name).suffix or mimetypes.guess_extension(mimetypes.guess_type(safe_name)[0] or "") or ""
-    file_name_with_extension = safe_name if Path(safe_name).suffix else f"{safe_name}{extension}"
-    return f"{prefix.strip('/')}/{identifier}/{file_name_with_extension}"
+    raw_name = str(file_name or "artifact.bin").replace("\\", "/")
+    parts = [part for part in raw_name.split("/") if part and part not in {".", ".."}]
+    if not parts:
+        parts = ["artifact.bin"]
+    safe_relative_path = Path(*parts)
+    final_name = safe_relative_path.name
+    extension = Path(final_name).suffix or mimetypes.guess_extension(mimetypes.guess_type(final_name)[0] or "") or ""
+    if not Path(final_name).suffix:
+        safe_relative_path = safe_relative_path.with_name(f"{final_name}{extension}")
+    return f"{prefix.strip('/')}/{identifier}/{safe_relative_path.as_posix()}"
 
 
 @lru_cache(maxsize=1)

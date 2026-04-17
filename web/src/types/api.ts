@@ -445,6 +445,58 @@ export type AssetDetail = AssetSummary & {
   chunk_preview: Array<Record<string, unknown>>;
 };
 
+export type FolderUploadFileResult = {
+  file_name: string;
+  relative_path: string;
+  size_bytes: number;
+  status: string;
+  dataset_id?: string | null;
+  file_tag?: string | null;
+  error?: string | null;
+};
+
+export type FolderUploadRelationship = {
+  left_table: string;
+  left_column: string;
+  right_table: string;
+  right_column: string;
+  confidence: number;
+  match_rate: number;
+};
+
+export type FolderUploadPreview = {
+  dataset_id: string;
+  file_name: string;
+  table_name: string;
+  file_tag?: string | null;
+  row_count: number;
+  column_count: number;
+  preview_columns: string[];
+  preview_rows: Record<string, unknown>[];
+};
+
+export type FolderUploadDatasetSummary = {
+  tables: string[];
+  tags: string[];
+  relationships: FolderUploadRelationship[];
+  previews: FolderUploadPreview[];
+  suggested_analysis_prompt?: string | null;
+  ready_message: string;
+};
+
+export type FolderUploadResponse = {
+  status: string;
+  session_id: string;
+  folder_name: string;
+  files_processed: number;
+  file_count: number;
+  total_size_bytes: number;
+  asset?: AssetDetail | null;
+  processed_files: FolderUploadFileResult[];
+  failed_files: FolderUploadFileResult[];
+  dataset_summary: FolderUploadDatasetSummary;
+};
+
 export type WorkspaceSummary = {
   workspace_id: string;
   user_id: string;
@@ -552,4 +604,149 @@ export type DemoResponse = {
   stats: DemoStat[];
   flow: DemoFlowStep[];
   suggestions: SuggestedAction[];
+};
+
+export type ImportJob = {
+  job_id: string;
+  workspace_id: string;
+  session_id: string;
+  source_type: string;
+  source_ref: string;
+  source_label: string;
+  status: string;
+  asset_id?: string | null;
+  error_message?: string | null;
+  result: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+};
+
+export type IntelligenceColumn = {
+  name: string;
+  sql_type: string;
+  semantic_type: string;
+  nullable: boolean;
+  non_null_count: number;
+  missing_count: number;
+  null_ratio: number;
+  unique_count: number;
+  unique_ratio: number;
+  sample_values: unknown[];
+};
+
+export type IntelligenceTable = {
+  name: string;
+  source_name?: string | null;
+  dataset_id?: string | null;
+  source_kind?: string | null;
+  row_count: number;
+  column_count: number;
+  primary_keys: string[];
+  columns: IntelligenceColumn[];
+  preview_rows: Record<string, unknown>[];
+};
+
+export type IntelligenceRelationship = {
+  left_table: string;
+  left_column: string;
+  right_table: string;
+  right_column: string;
+  relationship_type?: string;
+  match_rate: number;
+  confidence: number;
+};
+
+export type IntelligenceGraphNode = {
+  id: string;
+  label: string;
+  dataset_id?: string | null;
+  row_count: number;
+  column_count: number;
+  dataset_type?: string | null;
+};
+
+export type IntelligenceGraphEdge = {
+  id: string;
+  source: string;
+  target: string;
+  label: string;
+  confidence: number;
+};
+
+export type IntelligenceGraph = {
+  nodes: IntelligenceGraphNode[];
+  edges: IntelligenceGraphEdge[];
+};
+
+export type InsightChart = {
+  type: string;
+  title?: string | null;
+  x: string;
+  y?: string | null;
+  rows: Record<string, unknown>[];
+};
+
+export type InsightCard = {
+  kind: string;
+  title: string;
+  narrative: string;
+  confidence?: string | null;
+  chart?: InsightChart | null;
+};
+
+export type RecommendationCard = {
+  title: string;
+  body: string;
+  priority?: string | null;
+};
+
+export type AssetIntelligence = {
+  asset_id: string;
+  session_id: string;
+  dataset_type?: string | null;
+  status: string;
+  catalog: {
+    asset_id?: string;
+    session_id?: string;
+    tables?: Array<{
+      dataset_id?: string;
+      source_name?: string;
+      source_kind?: string;
+      table_name?: string;
+      source_path?: string;
+      row_count?: number;
+      preview_rows?: Record<string, unknown>[];
+    }>;
+  };
+  schema: {
+    dataset_type?: string | null;
+    tables: IntelligenceTable[];
+    relationships: IntelligenceRelationship[];
+    graph: IntelligenceGraph;
+  };
+  insights: {
+    summary?: string | null;
+    insights: InsightCard[];
+    anomalies: InsightCard[];
+    recommendations: RecommendationCard[];
+    charts: InsightChart[];
+    follow_up_questions: string[];
+  };
+  chat_context: {
+    dataset_type?: string | null;
+    default_table?: string | null;
+    tables?: Array<{ name?: string; columns?: string[]; primary_keys?: string[] }>;
+    relationships?: IntelligenceRelationship[];
+    suggested_questions?: string[];
+  };
+};
+
+export type AskDataResponse = {
+  question: string;
+  sql: string;
+  answer: string;
+  columns: string[];
+  rows: Record<string, unknown>[];
+  chart?: InsightChart | null;
 };

@@ -21,6 +21,10 @@ import {
 } from "./lib/api";
 import { clearStoredToken, getStoredToken, setStoredToken } from "./lib/auth";
 import demoDashboardScreenshot from "./assets/demo-dashboard.png";
+import AskDataChatPanel from "./components/AskDataChatPanel";
+import AssetIntelligencePanel from "./components/AssetIntelligencePanel";
+import FolderUploadPanel from "./components/FolderUploadPanel";
+import ImportHubPanel from "./components/ImportHubPanel";
 import type {
   AnalysisOutput,
   AssetDetail,
@@ -29,6 +33,7 @@ import type {
   DatasetSummary,
   DemoResponse,
   ForecastOutput,
+  FolderUploadResponse,
   JobStatusResponse,
   SuggestedAction,
   SolveRunStatus,
@@ -633,13 +638,14 @@ export default function App() {
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [activeAssetId, setActiveAssetId] = useState<string | null>(null);
   const [assetDetail, setAssetDetail] = useState<AssetDetail | null>(null);
+  const [latestFolderUpload, setLatestFolderUpload] = useState<FolderUploadResponse | null>(null);
+  const [uploadTitle, setUploadTitle] = useState("");
+  const [queuedFiles, setQueuedFiles] = useState<File[]>([]);
+  const [fileInputResetKey, setFileInputResetKey] = useState(0);
   const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [activeRun, setActiveRun] = useState<SolveRunStatus | null>(null);
 
-  const [uploadTitle, setUploadTitle] = useState("");
-  const [queuedFiles, setQueuedFiles] = useState<File[]>([]);
-  const [fileInputResetKey, setFileInputResetKey] = useState(0);
   const [transformPrompt, setTransformPrompt] = useState("Fill numeric missing values with mean");
   const [solvePrompt, setSolvePrompt] = useState(
     "Redesign this workspace and propose the highest-value next steps."
@@ -660,6 +666,7 @@ export default function App() {
   const [analysisJob, setAnalysisJob] = useState<JobStatusResponse | null>(null);
   const [forecastJobId, setForecastJobId] = useState<string | null>(null);
   const [forecastJob, setForecastJob] = useState<JobStatusResponse | null>(null);
+  const [chatSeedQuestion, setChatSeedQuestion] = useState<string | null>(null);
   const [routeHint, setRouteHint] = useState<RouteHint>("auto");
   const [timelineFilter, setTimelineFilter] = useState("");
   const deferredTimelineFilter = useDeferredValue(timelineFilter);
@@ -841,6 +848,7 @@ export default function App() {
       setAnalysisJobId(null);
       setForecastJob(null);
       setForecastJobId(null);
+      setLatestFolderUpload(null);
       setActivityFlow(null);
       return;
     }
@@ -879,6 +887,7 @@ export default function App() {
     if (!token || !activeWorkspaceId) {
       return;
     }
+    setLatestFolderUpload(null);
     void refreshWorkspace(activeWorkspaceId);
   }, [token, activeWorkspaceId]);
 
@@ -1182,7 +1191,8 @@ export default function App() {
       );
       setUploadTitle("");
       setQueuedFiles([]);
-      setFileInputResetKey((value) => value + 1);
+      setLatestFolderUpload(null);
+      setFileInputResetKey((value: number) => value + 1);
       startTransition(() => {
         setActiveAssetId(asset.asset_id);
         setPanel("assets");
@@ -1199,6 +1209,88 @@ export default function App() {
     } finally {
       setWorking(false);
     }
+  }
+
+  async function handleFolderUploadCompleted(payload: FolderUploadResponse) {
+    const steps = ["Stage files", "Register datasets", "Detect relationships", "Sync workspace"];
+    setLatestFolderUpload(payload);
+    setStatusMessage(payload.dataset_summary.ready_message || "Dataset folder uploaded.");
+    setActivityFlow(
+      completeActivityFlow(
+        "Dataset folder ready",
+        steps,
+        `${payload.files_processed} files processed and ${payload.dataset_summary.relationships.length} join candidates detected.`
+      )
+    );
+
+    if (!payload.asset) {
+      return;
+    }
+
+    startTransition(() => {
+      setActiveAssetId(payload.asset?.asset_id || null);
+      setAssetDetail(payload.asset || null);
+      setSelectedDatasetId(payload.asset?.datasets[0]?.dataset_id || null);
+      setPanel("assets");
+    });
+
+    if (activeWorkspaceId) {
+      await refreshWorkspace(activeWorkspaceId, payload.asset.asset_id);
+    }
+  }
+
+  async function handleExternalImportCompleted(job: { asset_id?: string | null; source_type: string }) {
+    if (!token || !activeWorkspaceId || !job.asset_id) {
+      return;
+    }
+    setLatestFolderUpload(null);
+    await refreshWorkspace(activeWorkspaceId, job.asset_id);
+    const detail = await getAsset(job.asset_id, token);
+    startTransition(() => {
+      setActiveAssetId(job.asset_id || null);
+      setAssetDetail(detail);
+      setPanel("assets");
+    });
+    setStatusMessage(
+      `${job.source_type === "google_drive" ? "Google Drive" : "Kaggle"} import is ready for AI analysis.`
+    );
+  }
+
+  async function handleFolderAutoAnalyze(prompt: string, assetId?: string | null) {
+    if (!token) {
+      return;
+    }
+
+    const resolvedAssetId = assetId || latestFolderUpload?.asset?.asset_id || activeAssetId;
+    let resolvedAssetDetail = assetDetail;
+    if (resolvedAssetId && assetDetail?.asset_id !== resolvedAssetId) {
+      resolvedAssetDetail = await getAsset(resolvedAssetId, token);
+    }
+
+    const resolvedDatasetId =
+      resolvedAssetDetail?.datasets[0]?.dataset_id || latestFolderUpload?.asset?.datasets[0]?.dataset_id || null;
+    if (!resolvedDatasetId) {
+      setStatusMessage("Upload a dataset folder with CSV or XLSX files before running auto analysis.");
+      return;
+    }
+
+    startTransition(() => {
+      setPanel("solve");
+      setWorkbenchMode("analysis");
+      setAnalysisPrompt(prompt);
+      setActiveAssetId(resolvedAssetId || null);
+      setAssetDetail(resolvedAssetDetail || null);
+      setSelectedDatasetId(resolvedDatasetId);
+    });
+    await handleStartAnalysis(prompt, resolvedDatasetId);
+  }
+
+  function handleAskDataShortcut(question: string) {
+    startTransition(() => {
+      setPanel("solve");
+      setChatSeedQuestion(question);
+    });
+    setStatusMessage("Loaded the question into Ask Your Data.");
   }
 
   async function handleTransformDataset() {
@@ -1288,9 +1380,10 @@ export default function App() {
     }
   }
 
-  async function handleStartAnalysis(promptOverride?: string) {
+  async function handleStartAnalysis(promptOverride?: string, datasetIdOverride?: string | null) {
     const resolvedPrompt = (promptOverride ?? analysisPrompt).trim();
-    if (!token || !selectedDatasetId || !resolvedPrompt || !customRangeComplete) {
+    const targetDatasetId = datasetIdOverride ?? selectedDatasetId;
+    if (!token || !targetDatasetId || !resolvedPrompt || !customRangeComplete) {
       return;
     }
     const steps = ["Queue analysis", "Generate insights", "Render dashboard"];
@@ -1308,7 +1401,7 @@ export default function App() {
     try {
       const job = await startAnalysisJob(
         {
-          dataset_id: selectedDatasetId,
+          dataset_id: targetDatasetId,
           query: resolvedPrompt,
           workflow_context: buildTimeFilterContext()
         },
@@ -1317,6 +1410,9 @@ export default function App() {
       setAnalysisJobId(job.job_id);
       setAnalysisJob(null);
       setAnalysisPrompt(resolvedPrompt);
+      if (targetDatasetId !== selectedDatasetId) {
+        setSelectedDatasetId(targetDatasetId);
+      }
       setStatusMessage(`Analysis job ${job.job_id.slice(0, 8)} started.`);
       setActivityFlow(buildAsyncJobFlow("Analysis in progress", steps, job.status));
     } catch (error) {
@@ -2105,12 +2201,27 @@ export default function App() {
 
         {panel === "assets" ? (
           <section className="panel-grid">
-            <article className="surface-card surface-card--wide">
-              <span className="section-kicker">Asset Intake</span>
-              <h3>Upload datasets, code, or project bundles</h3>
+            <FolderUploadPanel
+              token={token}
+              workspaceId={activeWorkspaceId}
+              latestUpload={latestFolderUpload}
+              onUploaded={(payload) => void handleFolderUploadCompleted(payload)}
+              onAutoAnalyze={(prompt, assetId) => void handleFolderAutoAnalyze(prompt, assetId)}
+            />
+
+            <ImportHubPanel
+              workspaceId={activeWorkspaceId}
+              token={token}
+              onImported={(job) => void handleExternalImportCompleted(job)}
+              onStatus={setStatusMessage}
+            />
+
+            <article className="surface-card">
+              <span className="section-kicker">Mixed Asset Intake</span>
+              <h3>Upload scripts, notes, archives, or one-off files</h3>
               <p>
-                Mixed file uploads are indexed into the workspace, expanded when zipped, chunked, embedded,
-                and made available to the solver retriever immediately.
+                Keep the premium folder flow for datasets, and use this lane for code, markdown, ZIP bundles,
+                and supporting project files that should still be indexed into the workspace.
               </p>
               <div className="upload-controls">
                 <input
@@ -2211,6 +2322,12 @@ export default function App() {
                 <p>No asset is selected yet.</p>
               )}
             </article>
+
+            <AssetIntelligencePanel
+              assetId={activeAssetId}
+              token={token}
+              onAskQuestion={handleAskDataShortcut}
+            />
           </section>
         ) : null}
 
@@ -2310,6 +2427,13 @@ export default function App() {
 
         {panel === "solve" ? (
           <section className="panel-grid">
+            <AskDataChatPanel
+              assetId={activeAssetId}
+              token={token}
+              initialQuestion={chatSeedQuestion}
+              onQuestionConsumed={() => setChatSeedQuestion(null)}
+            />
+
             <article className="surface-card surface-card--wide">
               <span className="section-kicker">AI Workbench</span>
               <h3>Analysis, forecasting, and orchestration in one workspace</h3>

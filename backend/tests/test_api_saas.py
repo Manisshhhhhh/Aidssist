@@ -167,6 +167,104 @@ class ApiSaaSTests(unittest.TestCase):
         )
         self.assertTrue(manual_payload["auto_analysis"]["summary"])
 
+    def test_folder_upload_preserves_paths_and_detects_relationships(self):
+        register_response = self.client.post(
+            "/v1/auth/register",
+            json={
+                "email": "dataops@aidssist.ai",
+                "password": "supersecure",
+                "display_name": "Data Ops",
+            },
+        )
+        self.assertEqual(register_response.status_code, 200)
+        token = register_response.json()["token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        workspace_response = self.client.post(
+            "/v1/workspaces",
+            json={"name": "Folder Upload Lab", "description": "Regression coverage for folder uploads."},
+            headers=headers,
+        )
+        self.assertEqual(workspace_response.status_code, 200)
+        workspace_id = workspace_response.json()["workspace_id"]
+
+        customers_csv = (
+            "id,customer_name,segment\n"
+            "1,Acme,Enterprise\n"
+            "2,Globex,SMB\n"
+            "3,Initech,Enterprise\n"
+        )
+        sales_csv = (
+            "sale_id,customer_id,amount,region\n"
+            "101,1,1200,North\n"
+            "102,2,850,South\n"
+            "103,1,940,North\n"
+        )
+        products_csv = (
+            "product_id,product_name,category\n"
+            "501,Analytics Suite,Software\n"
+            "502,Insight Pack,Services\n"
+        )
+
+        upload_response = self.client.post(
+            "/v1/upload-folder",
+            headers=headers,
+            data=[
+                ("workspace_id", workspace_id),
+                ("session_id", "folder-upload-regression"),
+                ("folder_name", "dataset-bundle"),
+                ("finalize", "true"),
+                ("relative_paths", "dataset-bundle/customers.csv"),
+                ("relative_paths", "dataset-bundle/sales_data.csv"),
+                ("relative_paths", "dataset-bundle/products.csv"),
+            ],
+            files=[
+                ("files", ("customers.csv", customers_csv.encode("utf-8"), "text/csv")),
+                ("files", ("sales_data.csv", sales_csv.encode("utf-8"), "text/csv")),
+                ("files", ("products.csv", products_csv.encode("utf-8"), "text/csv")),
+            ],
+        )
+        self.assertEqual(upload_response.status_code, 200)
+        payload = upload_response.json()
+
+        self.assertEqual(payload["status"], "success")
+        self.assertEqual(payload["folder_name"], "dataset-bundle")
+        self.assertEqual(payload["files_processed"], 3)
+        self.assertEqual(payload["file_count"], 3)
+        self.assertEqual(payload["failed_files"], [])
+        self.assertIn("sales", payload["dataset_summary"]["tags"])
+        self.assertEqual(
+            sorted(payload["dataset_summary"]["tables"]),
+            ["customers", "products", "sales_data"],
+        )
+        self.assertEqual(
+            payload["dataset_summary"]["ready_message"],
+            "Dataset Ready -> Generate Insights",
+        )
+
+        asset_files = {item["file_name"] for item in payload["asset"]["files"]}
+        self.assertIn("dataset-bundle/customers.csv", asset_files)
+        self.assertIn("dataset-bundle/sales_data.csv", asset_files)
+        self.assertIn("dataset-bundle/products.csv", asset_files)
+
+        previews = {preview["table_name"]: preview for preview in payload["dataset_summary"]["previews"]}
+        self.assertEqual(previews["customers"]["preview_rows"][0]["customer_name"], "Acme")
+        self.assertEqual(previews["sales_data"]["preview_rows"][0]["customer_id"], 1)
+
+        relationships = {
+            (
+                relationship["left_table"],
+                relationship["left_column"],
+                relationship["right_table"],
+                relationship["right_column"],
+            )
+            for relationship in payload["dataset_summary"]["relationships"]
+        }
+        self.assertIn(
+            ("customers", "id", "sales_data", "customer_id"),
+            relationships,
+        )
+
     def test_decision_history_endpoints_are_user_scoped_and_support_outcomes(self):
         register_response = self.client.post(
             "/v1/auth/register",

@@ -238,6 +238,58 @@ class UploadResponse(BaseModel):
     suggested_questions: list[str] = Field(default_factory=list)
 
 
+class FolderUploadFileResultResponse(BaseModel):
+    file_name: str
+    relative_path: str
+    size_bytes: int = 0
+    status: str
+    dataset_id: str | None = None
+    file_tag: str | None = None
+    error: str | None = None
+
+
+class FolderUploadRelationshipResponse(BaseModel):
+    left_table: str
+    left_column: str
+    right_table: str
+    right_column: str
+    confidence: float = 0.0
+    match_rate: float = 0.0
+
+
+class FolderUploadPreviewResponse(BaseModel):
+    dataset_id: str
+    file_name: str
+    table_name: str
+    file_tag: str | None = None
+    row_count: int = 0
+    column_count: int = 0
+    preview_columns: list[str] = Field(default_factory=list)
+    preview_rows: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class FolderUploadDatasetSummaryResponse(BaseModel):
+    tables: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    relationships: list[FolderUploadRelationshipResponse] = Field(default_factory=list)
+    previews: list[FolderUploadPreviewResponse] = Field(default_factory=list)
+    suggested_analysis_prompt: str | None = None
+    ready_message: str = "Dataset Ready -> Generate Insights"
+
+
+class FolderUploadResponse(BaseModel):
+    status: str
+    session_id: str
+    folder_name: str
+    files_processed: int = 0
+    file_count: int = 0
+    total_size_bytes: int = 0
+    asset: AssetDetail | None = None
+    processed_files: list[FolderUploadFileResultResponse] = Field(default_factory=list)
+    failed_files: list[FolderUploadFileResultResponse] = Field(default_factory=list)
+    dataset_summary: FolderUploadDatasetSummaryResponse = Field(default_factory=FolderUploadDatasetSummaryResponse)
+
+
 class UserResponse(BaseModel):
     user_id: str
     email: str
@@ -381,6 +433,142 @@ class DecisionHistoryItemResponse(BaseModel):
 
 class DecisionOutcomeUpdateRequest(BaseModel):
     outcome: str | None = None
+
+
+class GoogleDriveImportRequest(BaseModel):
+    workspace_id: str
+    file_id: str
+    access_token: str
+
+
+class KaggleImportRequest(BaseModel):
+    workspace_id: str
+    dataset_url: str
+
+
+class ImportJobResponse(BaseModel):
+    job_id: str
+    workspace_id: str
+    session_id: str
+    source_type: str
+    source_ref: str
+    source_label: str
+    status: str
+    asset_id: str | None = None
+    error_message: str | None = None
+    result: dict[str, Any] = Field(default_factory=dict)
+    created_at: str
+    updated_at: str
+    completed_at: str | None = None
+
+
+class SchemaColumnResponse(BaseModel):
+    name: str
+    sql_type: str
+    semantic_type: str
+    nullable: bool = True
+    non_null_count: int = 0
+    missing_count: int = 0
+    null_ratio: float = 0.0
+    unique_count: int = 0
+    unique_ratio: float = 0.0
+    sample_values: list[Any] = Field(default_factory=list)
+
+
+class SchemaTableResponse(BaseModel):
+    name: str
+    source_name: str | None = None
+    dataset_id: str | None = None
+    source_kind: str | None = None
+    row_count: int = 0
+    column_count: int = 0
+    primary_keys: list[str] = Field(default_factory=list)
+    columns: list[SchemaColumnResponse] = Field(default_factory=list)
+    preview_rows: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class SchemaRelationshipResponse(BaseModel):
+    left_table: str
+    left_column: str
+    right_table: str
+    right_column: str
+    relationship_type: str = "one_to_many"
+    match_rate: float = 0.0
+    confidence: float = 0.0
+
+
+class GraphNodeResponse(BaseModel):
+    id: str
+    label: str
+    dataset_id: str | None = None
+    row_count: int = 0
+    column_count: int = 0
+    dataset_type: str | None = None
+
+
+class GraphEdgeResponse(BaseModel):
+    id: str
+    source: str
+    target: str
+    label: str
+    confidence: float = 0.0
+
+
+class DatasetGraphResponse(BaseModel):
+    nodes: list[GraphNodeResponse] = Field(default_factory=list)
+    edges: list[GraphEdgeResponse] = Field(default_factory=list)
+
+
+class InsightChartResponse(BaseModel):
+    type: str
+    title: str | None = None
+    x: str
+    y: str | None = None
+    rows: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class InsightCardResponse(BaseModel):
+    kind: str
+    title: str
+    narrative: str
+    confidence: str | None = None
+    chart: InsightChartResponse | None = None
+
+
+class RecommendationCardResponse(BaseModel):
+    title: str
+    body: str
+    priority: str | None = None
+
+
+class AssetIntelligenceResponse(BaseModel):
+    asset_id: str
+    session_id: str
+    dataset_type: str | None = None
+    status: str
+    catalog: dict[str, Any] = Field(default_factory=dict)
+    schema: dict[str, Any] = Field(default_factory=dict)
+    insights: dict[str, Any] = Field(default_factory=dict)
+    chat_context: dict[str, Any] = Field(default_factory=dict)
+
+
+class AIInsightsRequest(BaseModel):
+    asset_id: str
+    force_refresh: bool = False
+
+
+class AIChatRequest(BaseModel):
+    asset_id: str
+    question: str
+
+
+class AIChatResponse(BaseModel):
+    question: str
+    sql: str
+    answer: str
+    columns: list[str] = Field(default_factory=list)
+    rows: list[dict[str, Any]] = Field(default_factory=list)
+    chart: dict[str, Any] | None = None
 
 
 UploadResponse.model_rebuild()
